@@ -10,6 +10,15 @@ import plotly.graph_objects as go
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Portal da Ala", page_icon="⛪", layout="wide")
 
+# --- CAMINHOS ABSOLUTOS ---
+# Garante que o banco e as pastas sejam criados no local correto do servidor
+BASE_DIR = os.getcwd()
+DB_PATH = os.path.join(BASE_DIR, 'igreja.db')
+POSTS_DIR = os.path.join(BASE_DIR, 'posts')
+
+if not os.path.exists(POSTS_DIR):
+    os.makedirs(POSTS_DIR)
+
 # --- CSS CUSTOMIZADO ---
 st.markdown("""
     <style>
@@ -18,7 +27,6 @@ st.markdown("""
     div[data-testid="stMetric"] { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
     .comunicado-card { padding: 20px; border-radius: 15px; border-left: 8px solid #1976d2; background-color: #f8f9fa; margin-bottom: 25px; }
     
-    /* Estilo do Mini Calendário de Gestão */
     .cal-container { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; max-width: 450px; margin: auto; text-align: center; }
     .cal-header { font-weight: bold; color: #1976d2; margin-bottom: 10px; text-transform: uppercase; font-size: 1.2rem; }
     .cal-weekday { font-size: 0.8rem; color: #666; font-weight: bold; padding: 5px; }
@@ -27,7 +35,6 @@ st.markdown("""
     .cal-today { border: 2px solid #ff4b4b; color: #ff4b4b; font-weight: bold; }
     .cal-empty { background-color: transparent; border: none; }
 
-    /* Calendário Gigante Ala */
     .cal-giant-container { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; width: 100%; text-align: center; }
     .cal-giant-header { font-weight: bold; color: #1976d2; margin-bottom: 15px; text-transform: uppercase; font-size: 1.8rem; text-align: center; }
     .cal-giant-day { min-height: 110px; padding: 10px; border-radius: 10px; background: white; border: 1px solid #ddd; display: flex; flex-direction: column; align-items: center; }
@@ -37,8 +44,11 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- BACKEND ---
+def get_connection():
+    return sqlite3.connect(DB_PATH)
+
 def init_db():
-    conn = sqlite3.connect('igreja.db')
+    conn = get_connection()
     c = conn.cursor()
     c.execute('CREATE TABLE IF NOT EXISTS comunicados (id INTEGER PRIMARY KEY AUTOINCREMENT, data_postagem TEXT, titulo TEXT, mensagem TEXT, autor TEXT, link TEXT, imagem TEXT)')
     c.execute('CREATE TABLE IF NOT EXISTS agenda (id INTEGER PRIMARY KEY AUTOINCREMENT, data_evento TEXT, titulo TEXT, descricao TEXT, local TEXT)')
@@ -49,38 +59,40 @@ def init_db():
     conn.close()
 
 def adicionar_comunicado(t, m, a, l, img):
-    conn = sqlite3.connect('igreja.db'); c = conn.cursor()
+    conn = get_connection(); c = conn.cursor()
     c.execute('INSERT INTO comunicados (data_postagem, titulo, mensagem, autor, link, imagem) VALUES (?,?,?,?,?,?)', (datetime.now().strftime("%Y-%m-%d"), t, m, a, l, img))
     conn.commit(); conn.close()
 
 def adicionar_planejamento_lideranca(org, atv, data_p, h_ini, h_fim):
-    conn = sqlite3.connect('igreja.db'); c = conn.cursor()
+    conn = get_connection(); c = conn.cursor()
     c.execute('INSERT INTO planejamento_lideranca (organizacao, atividade, data_planejada, horario_inicio, horario_fim) VALUES (?,?,?,?,?)', (org, atv, data_p, h_ini, h_fim))
     conn.commit(); conn.close()
 
 def adicionar_tarefa_bispado(tarefa, prioridade, responsavel, status):
-    conn = sqlite3.connect('igreja.db'); c = conn.cursor()
+    conn = get_connection(); c = conn.cursor()
     c.execute('INSERT INTO tarefas_bispado (data_criacao, tarefa, status, prioridade, responsavel) VALUES (?, ?, ?, ?, ?)', (datetime.now().strftime("%Y-%m-%d"), tarefa, status, prioridade, responsavel))
     conn.commit(); conn.close()
 
 def atualizar_status_tarefa(id_item, novo_status):
-    conn = sqlite3.connect('igreja.db'); c = conn.cursor()
+    conn = get_connection(); c = conn.cursor()
     c.execute('UPDATE tarefas_bispado SET status = ? WHERE id = ?', (novo_status, id_item))
     conn.commit(); conn.close()
 
 def adicionar_agenda_bispado(data, horario, nome, status):
-    conn = sqlite3.connect('igreja.db'); c = conn.cursor()
+    conn = get_connection(); c = conn.cursor()
     c.execute('INSERT INTO agenda_bispado (data_agenda, horario, nome_compromisso, status) VALUES (?, ?, ?, ?)', (data, horario, nome, status))
     conn.commit(); conn.close()
 
 def excluir_registro(tabela, id_item, imagem_path=None):
-    conn = sqlite3.connect('igreja.db'); c = conn.cursor()
-    if imagem_path and os.path.exists(str(imagem_path)): os.remove(imagem_path)
+    conn = get_connection(); c = conn.cursor()
+    if imagem_path and os.path.exists(str(imagem_path)):
+        try: os.remove(imagem_path)
+        except: pass
     c.execute(f'DELETE FROM {tabela} WHERE id = ?', (id_item,))
     conn.commit(); conn.close()
 
 def ler_dados(tabela, ordem="id DESC"):
-    conn = sqlite3.connect('igreja.db')
+    conn = get_connection()
     df = pd.read_sql_query(f"SELECT * FROM {tabela} ORDER BY {ordem}", conn)
     conn.close(); return df
 
@@ -128,7 +140,6 @@ def gerar_calendario_gigante(ano, mes, df_atividades):
                 html += "</div>"
     return html + "</div>"
 
-# --- FUNÇÃO DE INDICADORES (CONFORME PDF RELATÓRIO ALA VG 2) ---
 def exibir_indicadores_profeticos():
     st.header("📊 Prioridades Proféticas - Brasil")
     col1, col2, col3, col4 = st.columns(4)
@@ -144,11 +155,9 @@ def exibir_indicadores_profeticos():
     col8.metric("MEMBROS SEM INVESTIDURA", "26", "-4 p/ Meta")
     st.divider()
     
-    # Gráfico de Barras Principal
     meta_data_grafico = {"Indicador": ["Frequência", "Templo", "Retorno", "Jejum", "Batismos", "Missionários"], "Atual": [109, 102, 0, 20, 4, 1], "Meta": [110, 115, 10, 34, 20, 2]}
-    st.plotly_chart(go.Figure(data=[go.Bar(name='Atual', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Atual'], marker_color='#1e3a8a'), go.Bar(name='Meta', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Meta'], marker_color='#93c5fd')]), width='stretch')
+    st.plotly_chart(go.Figure(data=[go.Bar(name='Atual', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Atual'], marker_color='#1e3a8a'), go.Bar(name='Meta', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Meta'], marker_color='#93c5fd')]), use_container_width=True)
     
-    # TABELA DETALHADA AJUSTADA CONFORME PDF [cite: 5]
     st.subheader("📋 Tabela Detalhada")
     df_pdf = pd.DataFrame({
         "Categoria": ["VIVER", "VIVER", "CUIDAR NECESSITADOS", "CUIDAR NECESSITADOS", "CONVIDAR TODOS", "CONVIDAR TODOS", "UNIR FAMÍLIAS", "UNIR FAMÍLIAS"],
@@ -158,29 +167,27 @@ def exibir_indicadores_profeticos():
     })
     st.table(df_pdf)
 
-    with st.expander("📝 Notas e Observações do Relatório", expanded=True):
-        st.write("* **Viver o Evangelho:** Foco na frequência sacramental.\n* **Unir as Famílias:** Incentivo ao Templo.\n* **Convidar Todos:** Trabalho Missionário.")
-        st.markdown("---")
-        # Citação conforme PDF [cite: 6, 7]
-        st.markdown("### > *“(...) todos os que creem em Deus podem, com segurança, esperar por um mundo melhor (...)”* — **Éter 12:4**")
-
-# --- FUNÇÃO DE ORÇAMENTO ---
 def exibir_orcamento():
     st.subheader("💰 Gestão Orçamentária")
-    try:
-        df_fin = pd.read_excel("orcamento.xlsx", engine="openpyxl")
-        total = df_fin[df_fin['Categoria'] == 'TOTAL']
-        if not total.empty:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Orçamento Total", f"R$ {total['Orçamento Inicial (R$)'].values[0]:,.2f}")
-            c2.metric("Valor Gasto", f"R$ {total['Valor Gasto (R$)'].values[0]:,.2f}", delta_color="inverse")
-            c3.metric("Saldo", f"R$ {total['Saldo Atual (R$)'].values[0]:,.2f}")
-        st.plotly_chart(px.bar(df_fin[df_fin['Categoria'] != 'TOTAL'], x='Categoria', y='Orçamento Inicial (R$)', color='Categoria'), width='stretch')
-    except:
-        st.error("Arquivo 'orcamento.xlsx' não encontrado.")
+    if os.path.exists("orcamento.xlsx"):
+        try:
+            df_fin = pd.read_excel("orcamento.xlsx", engine="openpyxl")
+            total = df_fin[df_fin['Categoria'] == 'TOTAL']
+            if not total.empty:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Orçamento Total", f"R$ {total['Orçamento Inicial (R$)'].values[0]:,.2f}")
+                c2.metric("Valor Gasto", f"R$ {total['Valor Gasto (R$)'].values[0]:,.2f}", delta_color="inverse")
+                c3.metric("Saldo", f"R$ {total['Saldo Atual (R$)'].values[0]:,.2f}")
+            st.plotly_chart(px.bar(df_fin[df_fin['Categoria'] != 'TOTAL'], x='Categoria', y='Orçamento Inicial (R$)', color='Categoria'), use_container_width=True)
+        except Exception as e:
+            st.error(f"Erro ao ler orçamento: {e}")
+    else:
+        st.info("Arquivo 'orcamento.xlsx' não encontrado.")
 
 # --- INTERFACE SIDEBAR ---
-st.sidebar.image("logo.png", width=100)
+if os.path.exists("logo.png"):
+    st.sidebar.image("logo.png", width=100)
+
 menu = st.sidebar.radio("Navegar", ["📢 Mural de Avisos", "📅 Calendário da Ala", "🔒 Líderes e Secretários", "🏢 Painel do Bispado"])
 
 def verificar_acesso(tipo):
@@ -193,7 +200,7 @@ if menu == "📢 Mural de Avisos":
     df = ler_dados("comunicados")
     for _, r in df.iterrows():
         st.markdown(f"<div class='comunicado-card'><h3>📌 {r['titulo']}</h3><p>{r['data_postagem']}</p></div>", unsafe_allow_html=True)
-        if r.get('imagem') and os.path.exists(str(r['imagem'])): st.image(r['imagem'], width='stretch')
+        if r.get('imagem') and os.path.exists(str(r['imagem'])): st.image(r['imagem'], use_container_width=True)
         st.write(r['mensagem']); st.divider()
 
 # --- CALENDÁRIO ALA ---
@@ -206,9 +213,6 @@ elif menu == "📅 Calendário da Ala":
 # --- LÍDERES E SECRETÁRIOS ---
 elif menu == "🔒 Líderes e Secretários":
     if verificar_acesso("lideranca"):
-        col1, col2, col3 = st.columns([2, 1, 2])
-        with col2:
-            st.image("organizacao.png", width=200)
         t1, t2, t3, t4 = st.tabs(["📝 Postar", "🗑️ Gerenciar", "📅 Planejamento", "📊 Indicadores Proféticos"])
         
         with t1:
@@ -216,10 +220,12 @@ elif menu == "🔒 Líderes e Secretários":
                 t = st.text_input("Título"); m = st.text_area("Mensagem"); a = st.text_input("Autor")
                 l = st.text_input("Link"); img = st.file_uploader("Imagem", type=['jpg','png'])
                 if st.form_submit_button("Publicar"):
-                    path = f"posts/{datetime.now().strftime('%Y%m%d%H%M%S')}_{img.name}" if img else None
-                    if img: 
-                        with open(path, "wb") as f: f.write(img.getbuffer())
-                    adicionar_comunicado(t, m, a, l, path); st.rerun()
+                    img_path = None
+                    if img:
+                        filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{img.name}"
+                        img_path = os.path.join(POSTS_DIR, filename)
+                        with open(img_path, "wb") as f: f.write(img.getbuffer())
+                    adicionar_comunicado(t, m, a, l, img_path); st.rerun()
 
         with t2:
             df_m = ler_dados("comunicados")
@@ -231,7 +237,6 @@ elif menu == "🔒 Líderes e Secretários":
                     st.rerun()
 
         with t3:
-            st.subheader("Planejar atividades")
             with st.form("f_plan_fixed", clear_on_submit=True):
                 c1, c2, c3 = st.columns(3)
                 org = c1.selectbox("Org", ["Quórum de Elderes", "Sociedade de Socorro", "Moças", "Rapazes", "Primária", "Obra Missionária"])
@@ -254,7 +259,7 @@ elif menu == "🔒 Líderes e Secretários":
                 df_f = df_p[df_p['data_planejada'].str.contains(f"2026-{m_s:02d}")]
                 for _, r in df_f.iterrows():
                     ci, cb = st.columns([0.8, 0.2])
-                    ci.write(f"**{r['data_planejada']}** ({r['horario_inicio']}) - {r['organizacao']}")
+                    ci.write(f"**{r['data_planejada']}** - {r['organizacao']}")
                     if cb.button("🗑️", key=f"del_plan_{r['id']}"):
                         excluir_registro('planejamento_lideranca', r['id'])
                         st.rerun()
@@ -262,63 +267,47 @@ elif menu == "🔒 Líderes e Secretários":
         with t4:
             exibir_indicadores_profeticos()
 
-# --- BISPADO ---
 elif menu == "🏢 Painel do Bispado":
     if verificar_acesso("bispado"):
         tab_tarefas, tab_agenda, tab_orc, tab_ind = st.tabs(["🎯 Tarefas", "📅 Agenda", "💰 Orçamento", "📊 Indicadores Proféticos"])
         
         with tab_tarefas:
-            st.subheader("Nova Tarefa")
             with st.form("f_meta", clear_on_submit=True):
                 mt = st.text_input("Tarefa")
-                col_inputs = st.columns(3)
-                pr = col_inputs[0].selectbox("Prioridade", ["Alta","Média","Baixa"])
-                rs = col_inputs[1].text_input("Responsável")
-                stt = col_inputs[2].selectbox("Status", ["Pendente", "Concluido"])
+                c_inp = st.columns(3)
+                pr = c_inp[0].selectbox("Prioridade", ["Alta","Média","Baixa"])
+                rs = c_inp[1].text_input("Responsável")
+                stt = c_inp[2].selectbox("Status", ["Pendente", "Concluido"])
                 if st.form_submit_button("Salvar Tarefa"): 
                     if mt and rs:
                         adicionar_tarefa_bispado(mt, pr, rs, stt)
                         st.rerun()
             st.divider()
-            st.subheader("📋 Lista de Tarefas")
             df_t = ler_dados("tarefas_bispado")
             if not df_t.empty:
-                def color_font_status(val):
-                    color = 'red' if val == "Pendente" else 'green' if val == "Concluido" else 'black'
-                    return f'color: {color}; font-weight: bold;'
-                tabela_tarefas = df_t[['tarefa', 'prioridade', 'responsavel', 'status']].copy()
-                st.dataframe(tabela_tarefas.style.applymap(color_font_status, subset=['status']), width='stretch', hide_index=True)
-                with st.expander("⚙️ Gerenciar Status e Remoção"):
+                st.dataframe(df_t[['tarefa', 'prioridade', 'responsavel', 'status']], use_container_width=True, hide_index=True)
+                with st.expander("⚙️ Gerenciar Tarefas"):
                     for _, r in df_t.iterrows():
                         c_task, c_btn_status, c_btn_del = st.columns([0.6, 0.2, 0.2])
-                        c_task.write(f"**{r['tarefa']}** ({r['responsavel']})")
+                        c_task.write(f"**{r['tarefa']}**")
                         if r['status'] == "Pendente":
-                            if c_btn_status.button("✅ Concluir", key=f"done_{r['id']}"):
-                                atualizar_status_tarefa(r['id'], "Concluido")
-                                st.rerun()
-                        else: c_btn_status.write("✨ Finalizada")
-                        if c_btn_del.button("🗑️ Excluir", key=f"t_del_{r['id']}"):
-                            excluir_registro('tarefas_bispado', r['id'])
-                            st.rerun()
-            else: st.info("Nenhuma tarefa registrada.")
-
+                            if c_btn_status.button("✅", key=f"done_{r['id']}"):
+                                atualizar_status_tarefa(r['id'], "Concluido"); st.rerun()
+                        if c_btn_del.button("🗑️", key=f"t_del_{r['id']}"):
+                            excluir_registro('tarefas_bispado', r['id']); st.rerun()
+        
         with tab_agenda:
             with st.form("f_bis"):
-                d = st.date_input("Data"); h = st.time_input("Hora"); n = st.text_input("Assunto"); s = st.selectbox("Status", ["Agendado", "Confirmado", "Concluído"])
+                d = st.date_input("Data"); h = st.time_input("Hora"); n = st.text_input("Assunto")
                 if st.form_submit_button("Agendar"): 
-                    adicionar_agenda_bispado(d, h.strftime("%H:%M"), n, s)
-                    st.rerun()
+                    adicionar_agenda_bispado(d, h.strftime("%H:%M"), n, "Agendado"); st.rerun()
             df_a = ler_dados("agenda_bispado", "data_agenda ASC")
             for _, r in df_a.iterrows():
                 col1, col2 = st.columns([0.8, 0.2])
-                col1.write(f"🗓️ **{r['data_agenda']}** - {r['nome_compromisso']} ({r['status']})")
+                col1.write(f"🗓️ **{r['data_agenda']}** - {r['nome_compromisso']}")
                 if col2.button("❌", key=f"a_{r['id']}"): 
-                    excluir_registro('agenda_bispado', r['id'])
-                    st.rerun()
+                    excluir_registro('agenda_bispado', r['id']); st.rerun()
 
-        with tab_orc:
-            exibir_orcamento()
-
-        with tab_ind:
-            exibir_indicadores_profeticos()
+        with tab_orc: exibir_orcamento()
+        with tab_ind: exibir_indicadores_profeticos()
     else: st.warning("Acesso restrito.")
