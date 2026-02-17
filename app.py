@@ -128,7 +128,7 @@ def gerar_calendario_gigante(ano, mes, df_atividades):
                 html += "</div>"
     return html + "</div>"
 
-# --- FUNÇÃO DE INDICADORES (TABELA DETALHADA CONFORME PDF) ---
+# --- FUNÇÃO DE INDICADORES (CONFORME PDF RELATÓRIO ALA VG 2) ---
 def exibir_indicadores_profeticos():
     st.header("📊 Prioridades Proféticas - Brasil")
     col1, col2, col3, col4 = st.columns(4)
@@ -146,9 +146,9 @@ def exibir_indicadores_profeticos():
     
     # Gráfico de Barras Principal
     meta_data_grafico = {"Indicador": ["Frequência", "Templo", "Retorno", "Jejum", "Batismos", "Missionários"], "Atual": [109, 102, 0, 20, 4, 1], "Meta": [110, 115, 10, 34, 20, 2]}
-    st.plotly_chart(go.Figure(data=[go.Bar(name='Atual', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Atual'], marker_color='#1e3a8a'), go.Bar(name='Meta', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Meta'], marker_color='#93c5fd')]), use_container_width=True)
+    st.plotly_chart(go.Figure(data=[go.Bar(name='Atual', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Atual'], marker_color='#1e3a8a'), go.Bar(name='Meta', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Meta'], marker_color='#93c5fd')]), width='stretch')
     
-    # AJUSTE: Tabela Detalhada com os dados exatos do PDF 
+    # TABELA DETALHADA AJUSTADA CONFORME PDF [cite: 5]
     st.subheader("📋 Tabela Detalhada")
     df_pdf = pd.DataFrame({
         "Categoria": ["VIVER", "VIVER", "CUIDAR NECESSITADOS", "CUIDAR NECESSITADOS", "CONVIDAR TODOS", "CONVIDAR TODOS", "UNIR FAMÍLIAS", "UNIR FAMÍLIAS"],
@@ -175,7 +175,7 @@ def exibir_orcamento():
             c1.metric("Orçamento Total", f"R$ {total['Orçamento Inicial (R$)'].values[0]:,.2f}")
             c2.metric("Valor Gasto", f"R$ {total['Valor Gasto (R$)'].values[0]:,.2f}", delta_color="inverse")
             c3.metric("Saldo", f"R$ {total['Saldo Atual (R$)'].values[0]:,.2f}")
-        st.plotly_chart(px.bar(df_fin[df_fin['Categoria'] != 'TOTAL'], x='Categoria', y='Orçamento Inicial (R$)', color='Categoria'), use_container_width=True)
+        st.plotly_chart(px.bar(df_fin[df_fin['Categoria'] != 'TOTAL'], x='Categoria', y='Orçamento Inicial (R$)', color='Categoria'), width='stretch')
     except:
         st.error("Arquivo 'orcamento.xlsx' não encontrado.")
 
@@ -193,7 +193,7 @@ if menu == "📢 Mural de Avisos":
     df = ler_dados("comunicados")
     for _, r in df.iterrows():
         st.markdown(f"<div class='comunicado-card'><h3>📌 {r['titulo']}</h3><p>{r['data_postagem']}</p></div>", unsafe_allow_html=True)
-        if r.get('imagem') and os.path.exists(str(r['imagem'])): st.image(r['imagem'], use_container_width=True)
+        if r.get('imagem') and os.path.exists(str(r['imagem'])): st.image(r['imagem'], width='stretch')
         st.write(r['mensagem']); st.divider()
 
 # --- CALENDÁRIO ALA ---
@@ -287,7 +287,7 @@ elif menu == "🏢 Painel do Bispado":
                     color = 'red' if val == "Pendente" else 'green' if val == "Concluido" else 'black'
                     return f'color: {color}; font-weight: bold;'
                 tabela_tarefas = df_t[['tarefa', 'prioridade', 'responsavel', 'status']].copy()
-                st.dataframe(tabela_tarefas.style.applymap(color_font_status, subset=['status']), use_container_width=True, hide_index=True)
+                st.dataframe(tabela_tarefas.style.applymap(color_font_status, subset=['status']), width='stretch', hide_index=True)
                 with st.expander("⚙️ Gerenciar Status e Remoção"):
                     for _, r in df_t.iterrows():
                         c_task, c_btn_status, c_btn_del = st.columns([0.6, 0.2, 0.2])
