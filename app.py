@@ -2,58 +2,78 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, date, time
+from datetime import datetime
 import os
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Portal da Ala", page_icon="⛪", layout="wide")
 
 # --- CONEXÃO GOOGLE SHEETS ---
-# Garante que os dados sejam salvos na nuvem para sempre
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def ler_dados(aba):
-    return conn.read(worksheet=aba, ttl="0")
+    """
+    Lê dados da planilha com cache de 10 minutos (600s) para performance.
+    O cache é limpo automaticamente em funções de escrita (update).
+    """
+    try:
+        # ttl="600" mantém os dados rápidos; st.cache_data.clear() limpa quando necessário
+        return conn.read(worksheet=aba, ttl="600")
+    except Exception as e:
+        st.error(f"Erro ao conectar com a aba '{aba}': {e}")
+        return pd.DataFrame()
 
-def adicionar_comunicado(t, m, a, l, img_path):
+def adicionar_comunicado(t, m, a, l, img_url):
+    """
+    Adiciona comunicado salvando a URL da imagem (indicado para nuvem).
+    """
     df_atual = ler_dados("comunicados")
     nova_linha = pd.DataFrame([{
         "data_postagem": datetime.now().strftime("%Y-%m-%d"),
-        "titulo": t, "mensagem": m, "autor": a, "link": l, "imagem": img_path
+        "titulo": t, 
+        "mensagem": m, 
+        "autor": a, 
+        "link": l, 
+        "imagem": img_url  # Recomendação: Use URLs de imagem (Drive/ImgBB)
     }])
     df_final = pd.concat([df_atual, nova_linha], ignore_index=True)
     conn.update(worksheet="comunicados", data=df_final)
-    st.cache_data.clear()
+    st.cache_data.clear() # Limpa o cache para mostrar o novo post imediatamente
+    st.success("Comunicado adicionado com sucesso!")
 
-# --- FUNÇÃO DE INDICADORES (MANTENDO SEUS EXPANDERS) ---
+# --- FUNÇÃO DE INDICADORES DINÂMICOS ---
 def exibir_indicadores_profeticos():
     st.header("📊 Prioridades Proféticas - Brasil")
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("FREQUÊNCIA SACRAMENTAL", "109", "-1 p/ Meta")
-    col2.metric("MEMBROS PARTICIPANTES", "102", "-13 p/ Meta")
-    col3.metric("BATISMOS", "4", "-16 p/ Meta")
-    col4.metric("MISSIONÁRIOS", "1", "-1 p/ Meta")
     
-    meta_data_grafico = {"Indicador": ["Frequência", "Templo", "Retorno", "Jejum", "Batismos", "Missionários"], "Atual": [109, 102, 0, 20, 4, 1], "Meta": [110, 115, 10, 34, 20, 2]}
-    fig = go.Figure(data=[
-        go.Bar(name='Atual', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Atual'], marker_color='#1e3a8a'),
-        go.Bar(name='Meta', x=meta_data_grafico['Indicador'], y=meta_data_grafico['Meta'], marker_color='#93c5fd')
-    ])
-    st.plotly_chart(fig, use_container_width=True)
+    # Carregando dados dinâmicos da aba 'metas'
+    df_metas = ler_dados("metas")
     
-    # --- O EXPANDER E TABELA QUE VOCÊ PEDIU ---
-    with st.expander("📋 Visualizar Tabela Detalhada de Metas"):
-        df_pdf = pd.DataFrame({
-            "Categoria": ["VIVER", "VIVER", "CUIDAR NECESSITADOS", "CUIDAR NECESSITADOS", "CONVIDAR TODOS", "CONVIDAR TODOS", "UNIR FAMÍLIAS", "UNIR FAMÍLIAS"],
-            "Indicador": ["Frequência Sacramental", "Membros Participantes", "Membros Retornando", "Membros Jejuando", "Batismos de Conversos", "Missionários Servindo no Brasil", "Membros com Investidura", "Membros sem Investidura"],
-            "Atual": [109, 102, 0, 20, 4, 1, 49, 26],
-            "Meta": [110, 115, 10, 34, 20, 2, 50, 30]
-        })
-        st.table(df_pdf)
+    if not df_metas.empty:
+        # 1. KPIs no topo (pegando os 4 primeiros indicadores da planilha)
+        cols = st.columns(4)
+        for i, row in df_metas.head(4).iterrows():
+            diferenca = row['Atual'] - row['Meta']
+            delta_msg = f"{diferenca} p/ Meta" if diferenca < 0 else "Meta Atingida"
+            cols[i].metric(row['Indicador'].upper(), str(row['Atual']), delta_msg)
 
-# --- Exemplo de como fica o Bispado com Expander ---
-# def painel_bispado():
-#    ... outras funções ...
-#    with st.expander("⚙️ Gerenciar Tarefas"):
-#        df_t = ler_dados("tarefas_bispado")
-#        st.dataframe(df_t)
+        # 2. Gráfico Plotly Dinâmico
+        fig = go.Figure(data=[
+            go.Bar(name='Atual', x=df_metas['Indicador'], y=df_metas['Atual'], marker_color='#1e3a8a'),
+            go.Bar(name='Meta', x=df_metas['Indicador'], y=df_metas['Meta'], marker_color='#93c5fd')
+        ])
+        fig.update_layout(barmode='group', margin=dict(l=20, r=20, t=20, b=20))
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # 3. Expander com a Tabela Completa (conforme sua solicitação)
+        with st.expander("📋 Visualizar Tabela Detalhada de Metas"):
+            st.table(df_metas)
+    else:
+        st.warning("Crie uma aba chamada 'metas' na sua planilha com as colunas: Categoria, Indicador, Atual, Meta.")
+
+# --- INTERFACE PRINCIPAL ---
+def main():
+    # Aqui você chamaria suas funções de navegação
+    exibir_indicadores_profeticos()
+
+if __name__ == "__main__":
+    main()
